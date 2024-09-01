@@ -249,6 +249,27 @@ To install the `gh-make` extension, follow these steps:
    ```bash
    gh extension install Cdaprod/gh-make
    ```
+   
+#### Setup Permissions
+   
+1. Save the `gh-make-setup-script` content in a file named `gh-make-setup-script` in your extension directory.
+2. Update the main `gh-make` script with the content from the second artifact.
+3. Make both scripts executable:
+   ```bash
+   chmod +x ~/.local/share/gh/extensions/gh-make/gh-make
+   chmod +x ~/.local/share/gh/extensions/gh-make/gh-make-setup-script
+   ```
+4. To run the setup, use:
+   ```bash
+   gh make setup
+   ```
+   This will create and run a setup script with sudo, using the full path to the `gh` command.
+5. After setup, you can use the extension normally:
+   ```bash
+   gh make
+   ```
+
+This approach should solve the issue with sudo not finding the `gh` command, while still allowing for proper setup of permissions and directories. The setup process is now handled by a separate script that's run with sudo, while the main extension can be run without sudo after initial setup.
 
 ### Usage
 

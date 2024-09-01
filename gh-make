@@ -47,7 +47,32 @@ setup() {
   # Create setup script
   cat > "$EXT_DIR/setup.sh" << EOL
 #!/bin/bash
-$(cat "$EXT_DIR/gh-make-setup-script")
+
+# Find the full path to gh
+GH_PATH=$(which gh)
+
+if [ -z "$GH_PATH" ]; then
+    echo "Error: GitHub CLI (gh) not found. Please install it first."
+    exit 1
+fi
+
+# Configuration
+EXT_DIR="$HOME/.local/share/gh/extensions/gh-make"
+REPOS_DIR="${GH_MAKE_REPOS_DIR:-$HOME/repos}"
+HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
+SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
+
+# Ensure directories exist
+mkdir -p "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+
+# Set correct ownership and permissions
+chown -R $(logname):$(logname) "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+chmod -R 755 "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+
+# Mark setup as complete
+touch "$EXT_DIR/.setup_complete"
+
+echo "Setup complete. You can now use 'gh make' without sudo."
 EOL
 
   chmod +x "$EXT_DIR/setup.sh"
@@ -62,7 +87,119 @@ EOL
   exit 0
 }
 
-# [Rest of the functions: select_repos, install_hooks, install_scripts, index_repos, clean, main_menu]
+# Function to select repositories
+select_repos() {
+  local selected_repos=()
+  print_color $BLUE "Select repositories to process:"
+  if [ ! -d "$REPOS_DIR" ]; then
+    print_color $RED "Error: Repositories directory ($REPOS_DIR) not found."
+    return 1
+  fi
+  for repo in $(find "$REPOS_DIR" -type d -name ".git" | xargs -n 1 dirname); do
+    if confirm "Include $repo?"; then
+      selected_repos+=("$repo")
+    fi
+  done
+  if [ ${#selected_repos[@]} -eq 0 ]; then
+    print_color $YELLOW "No repositories selected."
+    return 1
+  fi
+  echo "${selected_repos[@]}"
+}
+
+# Function to install hooks
+install_hooks() {
+  print_color $BLUE "Installing hooks into repositories..."
+  local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
+  for repo in $repos; do
+    print_color $GREEN "Installing hooks in $repo..."
+    for hook in $HOOKS; do
+      if [ -f "$HOOKS_DIR/$hook" ]; then
+        cp "$HOOKS_DIR/$hook" "$repo/.git/hooks/"
+        chmod +x "$repo/.git/hooks/$hook"
+      else
+        print_color $YELLOW "Warning: Hook $hook not found in $HOOKS_DIR"
+      fi
+    done
+  done
+  print_color $GREEN "Hooks installation complete."
+}
+
+# Function to install scripts
+install_scripts() {
+  print_color $BLUE "Installing scripts into repositories..."
+  local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
+  for repo in $repos; do
+    print_color $GREEN "Copying scripts to $repo..."
+    mkdir -p "$repo/scripts"
+    if [ -d "$SCRIPTS_DIR" ]; then
+      cp -R "$SCRIPTS_DIR"/* "$repo/scripts/"
+    else
+      print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found."
+    fi
+  done
+  print_color $GREEN "Scripts installation complete."
+}
+
+# Function to index repositories
+index_repos() {
+  print_color $BLUE "Indexing Git repositories and adding to GitHub Project..."
+  if [ -f "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh" ]; then
+    if confirm "Do you want to run the indexing script?"; then
+      bash "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
+      print_color $GREEN "Indexing complete."
+    else
+      print_color $YELLOW "Indexing skipped."
+    fi
+  else
+    print_color $RED "Error: Indexing script not found in $SCRIPTS_DIR"
+  fi
+}
+
+# Function to clean up
+clean() {
+  print_color $BLUE "Cleaning up repositories..."
+  local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
+  for repo in $repos; do
+    print_color $GREEN "Cleaning up $repo..."
+    rm -rf "$repo/scripts"
+  done
+  print_color $GREEN "Cleanup complete."
+}
+
+# Main menu
+main_menu() {
+  while true; do
+    print_color $BLUE "\nGH Make - Main Menu"
+    print_color $YELLOW "1) Install hooks"
+    print_color $YELLOW "2) Install scripts"
+    print_color $YELLOW "3) Index repositories"
+    print_color $YELLOW "4) Clean up"
+    print_color $YELLOW "5) Run all"
+    print_color $YELLOW "0) Exit"
+    read -p "$(print_color $GREEN "Enter your choice: ")" choice
+
+    case $choice in
+      1) install_hooks ;;
+      2) install_scripts ;;
+      3) index_repos ;;
+      4) clean ;;
+      5) 
+        install_hooks
+        install_scripts
+        index_repos
+        ;;
+      0) 
+        print_color $GREEN "Exiting gh-make. Goodbye!"
+        exit 0 
+        ;;
+      *) print_color $RED "Invalid option. Please try again." ;;
+    esac
+  done
+}
 
 # Main execution
 if [ "$1" = "setup" ]; then
@@ -74,6 +211,15 @@ else
     exit 1
   fi
   
+  # Check if required directories exist
+  if [ ! -d "$HOOKS_DIR" ]; then
+    print_color $YELLOW "Warning: Hooks directory ($HOOKS_DIR) not found. Some features may not work."
+  fi
+
+  if [ ! -d "$SCRIPTS_DIR" ]; then
+    print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found. Some features may not work."
+  fi
+
   # Start the main menu
   main_menu
 fi

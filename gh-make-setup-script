@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Find the full path to gh
+GH_PATH=$(which gh)
+
+if [ -z "$GH_PATH" ]; then
+    echo "Error: GitHub CLI (gh) not found. Please install it first."
+    exit 1
+fi
+
+# Configuration
+EXT_DIR="$HOME/.local/share/gh/extensions/gh-make"
+REPOS_DIR="${GH_MAKE_REPOS_DIR:-$HOME/repos}"
+HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
+SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
+
+# Ensure directories exist
+mkdir -p "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+
+# Set correct ownership and permissions
+chown -R $(logname):$(logname) "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+chmod -R 755 "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+
+# Run gh make setup using the full path
+$GH_PATH make setup
+
+echo "Setup complete. You can now use 'gh make' without sudo."
