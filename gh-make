@@ -31,31 +31,183 @@ update_main_script() {
   cat > "$MAIN_SCRIPT" << 'EOL'
 #!/usr/bin/env bash
 
-# [Insert the entire content of the gh-make script here]
-# This should be the full interactive script we created earlier
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
+# Configuration
+REPOS_DIR="${GH_MAKE_REPOS_DIR:-$HOME/repos}"
+HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
+SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
+
+# Define hooks to be installed
+HOOKS="pre-commit commit-msg post-commit pre-push post-merge"
+
+# Function to print colored output
+print_color() {
+  local color=$1
+  local message=$2
+  echo -e "${color}${message}${NC}"
+}
+
+# Function to get user confirmation
+confirm() {
+  local message=$1
+  read -p "$(print_color $YELLOW "$message (y/n): ")" choice
+  case "$choice" in
+    y|Y ) return 0;;
+    * ) return 1;;
+  esac
+}
+
+# Function to select repositories
+select_repos() {
+  local selected_repos=()
+  local i=1
+  print_color $BLUE "Select repositories to process:"
+  for repo in $(find "$REPOS_DIR" -type d -name ".git" | xargs -n 1 dirname); do
+    if confirm "Include $repo?"; then
+      selected_repos+=("$repo")
+    fi
+  done
+  echo "${selected_repos[@]}"
+}
+
+# Function to install hooks
+install_hooks() {
+  print_color $BLUE "Installing hooks into repositories..."
+  local repos=$(select_repos)
+  for repo in $repos; do
+    print_color $GREEN "Installing hooks in $repo..."
+    for hook in $HOOKS; do
+      cp "$HOOKS_DIR/$hook" "$repo/.git/hooks/"
+      chmod +x "$repo/.git/hooks/$hook"
+    done
+  done
+  print_color $GREEN "Hooks installation complete."
+}
+
+# Function to install scripts
+install_scripts() {
+  print_color $BLUE "Installing scripts into repositories..."
+  local repos=$(select_repos)
+  for repo in $repos; do
+    print_color $GREEN "Copying scripts to $repo..."
+    mkdir -p "$repo/scripts"
+    cp -R "$SCRIPTS_DIR"/* "$repo/scripts/"
+  done
+  print_color $GREEN "Scripts installation complete."
+}
+
+# Function to index repositories
+index_repos() {
+  print_color $BLUE "Indexing Git repositories and adding to GitHub Project..."
+  if confirm "Do you want to run the indexing script?"; then
+    "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
+    print_color $GREEN "Indexing complete."
+  else
+    print_color $YELLOW "Indexing skipped."
+  fi
+}
+
+# Function to run setup
+setup() {
+  print_color $BLUE "Running setup to install hooks..."
+  if confirm "Do you want to run the setup script?"; then
+    "$SCRIPTS_DIR/setup.sh"
+    print_color $GREEN "Setup complete."
+  else
+    print_color $YELLOW "Setup skipped."
+  fi
+}
+
+# Function to clean up
+clean() {
+  print_color $BLUE "Cleaning up repositories..."
+  local repos=$(select_repos)
+  for repo in $repos; do
+    print_color $GREEN "Cleaning up $repo..."
+    rm -rf "$repo/scripts"
+  done
+  print_color $GREEN "Cleanup complete."
+}
+
+# Main menu
+main_menu() {
+  while true; do
+    print_color $BLUE "\nGH Make - Main Menu"
+    print_color $YELLOW "1) Install hooks"
+    print_color $YELLOW "2) Install scripts"
+    print_color $YELLOW "3) Index repositories"
+    print_color $YELLOW "4) Run setup"
+    print_color $YELLOW "5) Clean up"
+    print_color $YELLOW "6) Run all"
+    print_color $YELLOW "0) Exit"
+    read -p "$(print_color $GREEN "Enter your choice: ")" choice
+
+    case $choice in
+      1) install_hooks ;;
+      2) install_scripts ;;
+      3) index_repos ;;
+      4) setup ;;
+      5) clean ;;
+      6) 
+        install_hooks
+        install_scripts
+        setup
+        index_repos
+        ;;
+      0) exit 0 ;;
+      *) print_color $RED "Invalid option. Please try again." ;;
+    esac
+  done
+}
+
+# Start the main menu
+main_menu
 EOL
 
   chmod +x "$MAIN_SCRIPT"
   print_color $GREEN "gh-make script updated and set as executable."
 }
 
-# Check if the script exists and update it
-if [ -f "$MAIN_SCRIPT" ]; then
-  print_color $YELLOW "Existing gh-make script found. Updating..."
-  update_main_script
-else
-  print_color $YELLOW "gh-make script not found. Creating new script..."
-  update_main_script
-fi
+# Function to verify and fix permissions
+verify_permissions() {
+  print_color $BLUE "Verifying and fixing permissions..."
+  chmod +x "$MAIN_SCRIPT"
+  chmod +x "$EXTENSION_DIR/setup.sh"
+  print_color $GREEN "Permissions verified and fixed."
+}
 
-# Verify the installation
-if gh extension list | grep -q "gh-make"; then
-  print_color $GREEN "gh-make extension is installed and up to date."
-else
-  print_color $RED "Error: gh-make extension not found in gh extensions list."
-  print_color $YELLOW "Attempting to install gh-make extension..."
-  gh extension install Cdaprod/gh-make
-fi
+# Function to verify installation
+verify_installation() {
+  if gh extension list | grep -q "gh-make"; then
+    print_color $GREEN "gh-make extension is installed."
+  else
+    print_color $RED "Error: gh-make extension not found in gh extensions list."
+    print_color $YELLOW "Attempting to install gh-make extension..."
+    gh extension install Cdaprod/gh-make
+  fi
+}
 
-print_color $BLUE "Setup complete. You can now use 'gh make' to run the extension."
+# Main setup process
+main_setup() {
+  print_color $BLUE "Starting gh-make setup process..."
+
+  # Update main script
+  update_main_script
+
+  # Verify and fix permissions
+  verify_permissions
+
+  # Verify installation
+  verify_installation
+
+  print_color $GREEN "Setup complete. You can now use 'gh make' to run the extension."
+}
+
+# Run the main setup process
+main_setup
