@@ -37,54 +37,18 @@ confirm() {
 
 # Function for setup
 setup() {
-  if [ "$(id -u)" = "0" ]; then
-    print_color $RED "Error: Setup should not be run as root. Please run 'gh make setup' without sudo."
-    exit 1
-  fi
-
   print_color $BLUE "Running setup for gh-make..."
   
-  # Create setup script
-  cat > "$EXT_DIR/setup.sh" << EOL
-#!/bin/bash
-
-# Find the full path to gh
-GH_PATH=$(which gh)
-
-if [ -z "$GH_PATH" ]; then
-    echo "Error: GitHub CLI (gh) not found. Please install it first."
-    exit 1
-fi
-
-# Configuration
-EXT_DIR="$HOME/.local/share/gh/extensions/gh-make"
-REPOS_DIR="${GH_MAKE_REPOS_DIR:-$HOME/repos}"
-HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
-SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
-
-# Ensure directories exist
-mkdir -p "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
-
-# Set correct ownership and permissions
-chown -R $(logname):$(logname) "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
-chmod -R 755 "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
-
-# Mark setup as complete
-touch "$EXT_DIR/.setup_complete"
-
-echo "Setup complete. You can now use 'gh make' without sudo."
-EOL
-
-  chmod +x "$EXT_DIR/setup.sh"
+  # Ensure directories exist
+  mkdir -p "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
   
-  # Run setup script with sudo
-  if sudo "$EXT_DIR/setup.sh"; then
-    print_color $GREEN "Setup complete. You can now use 'gh make' commands."
-  else
-    print_color $RED "Setup failed. Please check the error messages above."
-  fi
+  # Set correct permissions
+  chmod -R 755 "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
   
-  exit 0
+  # Mark setup as complete
+  touch "$EXT_DIR/.setup_complete"
+  
+  print_color $GREEN "Setup complete. You can now use 'gh make' commands."
 }
 
 # Function to select repositories
@@ -207,8 +171,8 @@ if [ "$1" = "setup" ]; then
 else
   # Check if setup has been run
   if [ ! -f "$EXT_DIR/.setup_complete" ]; then
-    print_color $YELLOW "Initial setup has not been run. Please run 'gh make setup' first."
-    exit 1
+    print_color $YELLOW "Initial setup has not been run. Running setup now..."
+    setup
   fi
   
   # Check if required directories exist
