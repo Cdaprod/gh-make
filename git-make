@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -e
+
+# Configuration
+REPOS_DIR="${GH_MAKE_REPOS_DIR:-/path/to/your/repos}"
+HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
+SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
+
+# Define hooks to be installed
+HOOKS="pre-commit commit-msg post-commit pre-push post-merge"
+
+# Function to install hooks
+install_hooks() {
+  echo "Installing hooks into repositories..."
+  find "$REPOS_DIR" -type d -name ".git" | while read -r repo_git_dir; do
+    repo_dir=$(dirname "$repo_git_dir")
+    echo "Installing hooks in $repo_dir..."
+    for hook in $HOOKS; do
+      cp "$HOOKS_DIR/$hook" "$repo_git_dir/hooks/"
+      chmod +x "$repo_git_dir/hooks/$hook"
+    done
+  done
+  echo "Hooks installation complete."
+}
+
+# Function to install scripts
+install_scripts() {
+  echo "Installing scripts into repositories..."
+  find "$REPOS_DIR" -type d -name ".git" | while read -r repo_git_dir; do
+    repo_dir=$(dirname "$repo_git_dir")
+    echo "Copying scripts to $repo_dir..."
+    mkdir -p "$repo_dir/scripts"
+    cp -R "$SCRIPTS_DIR"/* "$repo_dir/scripts/"
+  done
+  echo "Scripts installation complete."
+}
+
+# Function to index repositories
+index_repos() {
+  echo "Indexing Git repositories and adding to GitHub Project..."
+  "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
+  echo "Indexing complete."
+}
+
+# Function to run setup
+setup() {
+  echo "Running setup to install hooks..."
+  "$SCRIPTS_DIR/setup.sh"
+  echo "Setup complete."
+}
+
+# Function to clean up
+clean() {
+  echo "Cleaning up repositories..."
+  find "$REPOS_DIR" -type d -name ".git" | while read -r repo_git_dir; do
+    repo_dir=$(dirname "$repo_git_dir")
+    echo "Cleaning up $repo_dir..."
+    rm -rf "$repo_dir/scripts"
+  done
+  echo "Cleanup complete."
+}
+
+# Main command handler
+case "$1" in
+  install-hooks)
+    install_hooks
+    ;;
+  install-scripts)
+    install_scripts
+    ;;
+  index-repos)
+    index_repos
+    ;;
+  setup)
+    setup
+    ;;
+  clean)
+    clean
+    ;;
+  all)
+    install_hooks
+    install_scripts
+    setup
+    index_repos
+    ;;
+  *)
+    echo "Usage: gh make <command>"
+    echo "Available commands:"
+    echo "  install-hooks   - Install hooks into all repositories"
+    echo "  install-scripts - Install shared scripts into all repositories"
+    echo "  index-repos     - Index Git repositories and add them to GitHub Project"
+    echo "  setup           - Run setup script to install hooks"
+    echo "  clean           - Clean up the script and docker templates from repositories"
+    echo "  all             - Run all commands (except clean)"
+    exit 1
+    ;;
+esac
