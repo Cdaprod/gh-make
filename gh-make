@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 # Configuration
 REPOS_DIR="${GH_MAKE_REPOS_DIR:-/path/to/your/repos}"
 HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
@@ -9,89 +16,125 @@ SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
 # Define hooks to be installed
 HOOKS="pre-commit commit-msg post-commit pre-push post-merge"
 
+# Function to print colored output
+print_color() {
+  local color=$1
+  local message=$2
+  echo -e "${color}${message}${NC}"
+}
+
+# Function to get user confirmation
+confirm() {
+  local message=$1
+  read -p "$(print_color $YELLOW "$message (y/n): ")" choice
+  case "$choice" in
+    y|Y ) return 0;;
+    * ) return 1;;
+  esac
+}
+
+# Function to select repositories
+select_repos() {
+  local selected_repos=()
+  local i=1
+  print_color $BLUE "Select repositories to process:"
+  for repo in $(find "$REPOS_DIR" -type d -name ".git" | xargs -n 1 dirname); do
+    if confirm "Include $repo?"; then
+      selected_repos+=("$repo")
+    fi
+  done
+  echo "${selected_repos[@]}"
+}
+
 # Function to install hooks
 install_hooks() {
-  echo "Installing hooks into repositories..."
-  find "$REPOS_DIR" -type d -name ".git" | while read -r repo_git_dir; do
-    repo_dir=$(dirname "$repo_git_dir")
-    echo "Installing hooks in $repo_dir..."
+  print_color $BLUE "Installing hooks into repositories..."
+  local repos=$(select_repos)
+  for repo in $repos; do
+    print_color $GREEN "Installing hooks in $repo..."
     for hook in $HOOKS; do
-      cp "$HOOKS_DIR/$hook" "$repo_git_dir/hooks/"
-      chmod +x "$repo_git_dir/hooks/$hook"
+      cp "$HOOKS_DIR/$hook" "$repo/.git/hooks/"
+      chmod +x "$repo/.git/hooks/$hook"
     done
   done
-  echo "Hooks installation complete."
+  print_color $GREEN "Hooks installation complete."
 }
 
 # Function to install scripts
 install_scripts() {
-  echo "Installing scripts into repositories..."
-  find "$REPOS_DIR" -type d -name ".git" | while read -r repo_git_dir; do
-    repo_dir=$(dirname "$repo_git_dir")
-    echo "Copying scripts to $repo_dir..."
-    mkdir -p "$repo_dir/scripts"
-    cp -R "$SCRIPTS_DIR"/* "$repo_dir/scripts/"
+  print_color $BLUE "Installing scripts into repositories..."
+  local repos=$(select_repos)
+  for repo in $repos; do
+    print_color $GREEN "Copying scripts to $repo..."
+    mkdir -p "$repo/scripts"
+    cp -R "$SCRIPTS_DIR"/* "$repo/scripts/"
   done
-  echo "Scripts installation complete."
+  print_color $GREEN "Scripts installation complete."
 }
 
 # Function to index repositories
 index_repos() {
-  echo "Indexing Git repositories and adding to GitHub Project..."
-  "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
-  echo "Indexing complete."
+  print_color $BLUE "Indexing Git repositories and adding to GitHub Project..."
+  if confirm "Do you want to run the indexing script?"; then
+    "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
+    print_color $GREEN "Indexing complete."
+  else
+    print_color $YELLOW "Indexing skipped."
+  fi
 }
 
 # Function to run setup
 setup() {
-  echo "Running setup to install hooks..."
-  "$SCRIPTS_DIR/setup.sh"
-  echo "Setup complete."
+  print_color $BLUE "Running setup to install hooks..."
+  if confirm "Do you want to run the setup script?"; then
+    "$SCRIPTS_DIR/setup.sh"
+    print_color $GREEN "Setup complete."
+  else
+    print_color $YELLOW "Setup skipped."
+  fi
 }
 
 # Function to clean up
 clean() {
-  echo "Cleaning up repositories..."
-  find "$REPOS_DIR" -type d -name ".git" | while read -r repo_git_dir; do
-    repo_dir=$(dirname "$repo_git_dir")
-    echo "Cleaning up $repo_dir..."
-    rm -rf "$repo_dir/scripts"
+  print_color $BLUE "Cleaning up repositories..."
+  local repos=$(select_repos)
+  for repo in $repos; do
+    print_color $GREEN "Cleaning up $repo..."
+    rm -rf "$repo/scripts"
   done
-  echo "Cleanup complete."
+  print_color $GREEN "Cleanup complete."
 }
 
-# Main command handler
-case "$1" in
-  install-hooks)
-    install_hooks
-    ;;
-  install-scripts)
-    install_scripts
-    ;;
-  index-repos)
-    index_repos
-    ;;
-  setup)
-    setup
-    ;;
-  clean)
-    clean
-    ;;
-  all)
-    install_hooks
-    install_scripts
-    setup
-    index_repos
-    ;;
-  *)
-    echo "Usage: gh make <command>"
-    echo "Available commands:"
-    echo "  install-hooks   - Install hooks into all repositories"
-    echo "  install-scripts - Install shared scripts into all repositories"
-    echo "  index-repos     - Index Git repositories and add them to GitHub Project"
-    echo "  setup           - Run setup script to install hooks"
-    echo "  clean           - Clean up the script and docker templates from repositories"
-    echo "  all             - Run all commands (except clean)"
-    exit 1
-    ;;
-esac
+# Main menu
+main_menu() {
+  while true; do
+    print_color $BLUE "\nGH Make - Main Menu"
+    print_color $YELLOW "1) Install hooks"
+    print_color $YELLOW "2) Install scripts"
+    print_color $YELLOW "3) Index repositories"
+    print_color $YELLOW "4) Run setup"
+    print_color $YELLOW "5) Clean up"
+    print_color $YELLOW "6) Run all"
+    print_color $YELLOW "0) Exit"
+    read -p "$(print_color $GREEN "Enter your choice: ")" choice
+
+    case $choice in
+      1) install_hooks ;;
+      2) install_scripts ;;
+      3) index_repos ;;
+      4) setup ;;
+      5) clean ;;
+      6) 
+        install_hooks
+        install_scripts
+        setup
+        index_repos
+        ;;
+      0) exit 0 ;;
+      *) print_color $RED "Invalid option. Please try again." ;;
+    esac
+  done
+}
+
+# Start the main menu
+main_menu
