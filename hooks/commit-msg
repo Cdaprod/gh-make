@@ -1,0 +1,12 @@
+#!/bin/bash
+
+echo "Checking commit message format..."
+
+# Ensure commit message follows a convention but does not block if it doesn't
+commit_msg=$(cat "$1")
+if ! grep -qE "^(feat|fix|docs|style|refactor|test|chore): " <<< "$commit_msg"; then
+  echo "Warning: Commit message does not follow the convention 'type: description'."
+  echo "Recommended types: feat, fix, docs, style, refactor, test, chore."
+fi
+
+echo "Commit message check completed."

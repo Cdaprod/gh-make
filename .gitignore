@@ -1,0 +1,23 @@
+# Ignore log files
+*.log
+
+# Ignore temporary files and folders
+tmp/
+*.tmp
+*.swp
+
+# Ignore build directories and artifacts
+build/
+dist/
+node_modules/
+
+# Ignore Python virtual environments
+venv/
+.venv/
+
+# Ignore compiled Python files
+__pycache__/
+*.py[cod]
+
+# Ignore other environment files
+.env

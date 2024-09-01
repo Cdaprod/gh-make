@@ -1,0 +1,20 @@
+#!/bin/bash
+
+echo "Running Python tests..."
+
+# Use environment variables or defaults
+WORKSPACE_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
+TEST_CMD="${TEST_CMD:-pytest}"
+
+# Change to the workspace directory
+cd "$WORKSPACE_DIR"
+
+# Run tests
+if command -v "$TEST_CMD" &> /dev/null; then
+  echo "Running tests with $TEST_CMD..."
+  $TEST_CMD || echo "Some tests failed."
+else
+  echo "Test command $TEST_CMD not found. Please install the required testing framework."
+fi
+
+echo "Python tests completed."

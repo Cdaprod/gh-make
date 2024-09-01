@@ -1,0 +1,49 @@
+# .github/workflow-templates/setup-go-env.yml
+name: Go Env Setup
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch to run on'
+        default: 'main'
+        required: false
+        type: string
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Check Env
+        id: check_env
+        run: |
+          if [ -f ".env_setup_done" ]; then
+            echo "Env already set up."
+            exit 0
+          fi
+
+      - name: Pull Go Docker
+        if: steps.check_env.outcome != 'success'
+        run: docker pull golang:latest
+
+      - name: Setup in Docker
+        if: steps.check_env.outcome != 'success'
+        run: |
+          docker run --rm -v "$PWD":/app -w /app golang:latest bash .github/environments/.go/init
+          docker run --rm -v "$PWD":/app -w /app golang:latest bash .github/environments/.go/build
+          touch .env_setup_done  # Mark as set up
+
+      - name: Commit Changes
+        if: steps.check_env.outcome != 'success'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "Setup Go Env"
+          git push

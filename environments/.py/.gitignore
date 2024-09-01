@@ -1,0 +1,23 @@
+# Ignore Python virtual environments
+venv/
+.venv/
+
+# Ignore compiled Python files
+__pycache__/
+*.py[cod]
+
+# Ignore other environment files
+.env
+
+# Ignore package distributions
+dist/
+build/
+*.egg-info/
+
+# Ignore log files
+*.log
+
+# Ignore temporary files and swap files
+*.swp
+*.tmp
+.DS_Store

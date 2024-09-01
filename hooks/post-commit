@@ -1,0 +1,18 @@
+#!/bin/bash
+
+echo "Post-commit: Generating version and tagging..."
+
+# Fetch the latest tags
+git fetch --tags
+
+# Determine the next version based on the latest tag
+latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
+IFS='.' read -r major minor patch <<< "${latest_tag//[!0-9.]/}"
+patch=$((patch + 1))
+new_version="v${major}.${minor}.${patch}"
+
+# Automatically create and push a new tag for the version
+git tag -a "$new_version" -m "Auto-incremented version to $new_version"
+git push origin "$new_version"
+
+echo "New version tagged as $new_version."

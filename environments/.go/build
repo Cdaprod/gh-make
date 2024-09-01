@@ -1,0 +1,26 @@
+#!/bin/bash
+
+echo "Building Go application..."
+
+# Use environment variables or set defaults
+DOCKERFILE_PATH="${DOCKERFILE_PATH:-Dockerfile}"
+OUTPUT_BINARY="${OUTPUT_BINARY:-myapp}"
+MAIN_GO_FILE="${MAIN_GO_FILE:-main.go}"
+CURRENT_DIR=$(pwd)
+
+# Check if Dockerfile exists in the current directory
+if [ -f "$CURRENT_DIR/$DOCKERFILE_PATH" ]; then
+  echo "Dockerfile found at $CURRENT_DIR/$DOCKERFILE_PATH. Building Docker image..."
+  docker build -t "$GITHUB_REPOSITORY" -f "$CURRENT_DIR/$DOCKERFILE_PATH" .
+  echo "Docker image built successfully."
+else
+  echo "No Dockerfile found in $CURRENT_DIR. Building Go module..."
+
+  # Build the Go application
+  if [ -f "$CURRENT_DIR/$MAIN_GO_FILE" ]; then
+    go build -o "$OUTPUT_BINARY" "$CURRENT_DIR/$MAIN_GO_FILE"
+    echo "Go module built successfully as $OUTPUT_BINARY."
+  else
+    echo "No $MAIN_GO_FILE found in $CURRENT_DIR. Please ensure your Go repository is set up correctly."
+  fi
+fi

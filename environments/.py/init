@@ -1,0 +1,40 @@
+#!/bin/bash
+
+echo "Initializing Python environment..."
+
+# Check if virtual environment already exists
+if [ ! -d "venv" ]; then
+  python -m venv venv
+  echo "Virtual environment created."
+fi
+
+# Activate the virtual environment
+source venv/bin/activate
+
+# Install custom libraries if not already installed
+CUSTOM_LIBS=".github/environments/.py/lib/"
+if [ -d "$CUSTOM_LIBS" ]; then
+  for lib in "$CUSTOM_LIBS"/*; do
+    if [ -d "$lib" ] && [ ! -f "$lib/setup.py" ]; then
+      pip install -e "$lib" || echo "Failed to install custom library $lib"
+    fi
+  done
+fi
+
+# Append dependencies if needed
+if [ -f "requirements.txt" ]; then
+  echo "Checking and appending missing dependencies..."
+  while IFS= read -r line; do
+    if ! grep -q "^$line" requirements.txt; then
+      echo "$line" >> requirements.txt
+      echo "Appended missing dependency: $line"
+    fi
+  done < ".github/environments/.py/requirements.txt"
+else
+  cp .github/environments/.py/requirements.txt .
+  echo "requirements.txt created."
+fi
+
+pip install -r requirements.txt
+
+echo "Python environment initialized."

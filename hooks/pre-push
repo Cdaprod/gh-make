@@ -1,0 +1,10 @@
+#!/bin/bash
+
+echo "Running pre-push actions..."
+
+# Example: Run a non-blocking CI check script
+if [ -f "scripts/ci-check.sh" ]; then
+  ./scripts/ci-check.sh || echo "CI checks found issues. Review the report."
+fi
+
+echo "Pre-push actions completed."

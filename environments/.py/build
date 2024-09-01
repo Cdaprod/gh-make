@@ -1,0 +1,25 @@
+#!/bin/bash
+
+echo "Building Python environment..."
+
+# Use environment variables or defaults
+DOCKERFILE_PATH=".github/environments/.py/Dockerfile"
+SETUP_PY_FILE="setup.py"
+REPO_NAME=$(basename "$GITHUB_REPOSITORY")  # Extract repository name to use as app name
+
+# Check if Dockerfile exists to determine if we should build a Docker image
+if [ -f "$DOCKERFILE_PATH" ]; then
+  echo "Dockerfile found. Building Docker image..."
+  docker build -t "$REPO_NAME" -f "$DOCKERFILE_PATH" .
+  echo "Docker image built successfully as $REPO_NAME."
+else
+  echo "No Dockerfile found. Building Python module..."
+
+  # Check if setup.py exists to build a Python module
+  if [ -f "$SETUP_PY_FILE" ]; then
+    python setup.py sdist bdist_wheel
+    echo "Python module built successfully."
+  else
+    echo "No setup.py found. Please ensure your Python repository is set up correctly."
+  fi
+fi

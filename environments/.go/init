@@ -1,0 +1,39 @@
+#!/bin/bash
+
+echo "Initializing Go environment..."
+
+# Use GitHub environment variables or set defaults
+GO_MOD_FILE="${GO_MOD_FILE:-go.mod}"
+MODULE_NAME="${MODULE_NAME:-$(basename $(pwd))}"
+CURRENT_DIR=$(pwd)
+
+# Enable Go modules explicitly
+export GO111MODULE=on
+
+# Check if go.mod exists in the current directory or a specified path
+if [ -f "$CURRENT_DIR/$GO_MOD_FILE" ]; then
+  echo "Existing $GO_MOD_FILE found in $CURRENT_DIR. Checking for missing dependencies..."
+
+  # Define a list of required dependencies (replace or extend as needed)
+  DEPENDENCIES=(
+    "github.com/sirupsen/logrus@v1.8.1"
+    "github.com/pkg/errors@v0.9.1"
+  )
+
+  # Loop through dependencies and add missing ones
+  for dep in "${DEPENDENCIES[@]}"; do
+    if ! go list -m "$dep" >/dev/null 2>&1; then
+      echo "Adding missing dependency: $dep"
+      go get "$dep"
+    fi
+  done
+
+else
+  echo "No $GO_MOD_FILE file found in $CURRENT_DIR. Initializing new module..."
+  go mod init "$MODULE_NAME"
+fi
+
+# Download necessary Go modules and tidy up
+go mod tidy
+
+echo "Go environment initialized."

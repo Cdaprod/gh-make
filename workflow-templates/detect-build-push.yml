@@ -1,0 +1,57 @@
+name: Detect Build Push
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  detect-build-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Detect project language
+        run: |
+          bash .github/environments/detect_language.sh
+
+      - name: Initialize Environment for Go
+        if: env.DETECTED_LANGUAGE == 'go'
+        run: |
+          echo "Initializing Go environment..."
+          bash .github/environments/.go/init
+
+      - name: Initialize Environment for Python
+        if: env.DETECTED_LANGUAGE == 'python'
+        run: |
+          echo "Initializing Python environment..."
+          bash .github/environments/.py/init
+
+      - name: Build and Push Go Application
+        if: env.DETECTED_LANGUAGE == 'go'
+        run: |
+          echo "Building Go application..."
+          bash .github/environments/.go/build
+          echo "Pushing Go application..."
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/my-go-app:${{ github.sha }} .
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKER_USERNAME }}/my-go-app:${{ github.sha }}
+
+      - name: Build and Push Python Application
+        if: env.DETECTED_LANGUAGE == 'python'
+        run: |
+          echo "Building Python application..."
+          bash .github/environments/.py/build
+          echo "Pushing Python application..."
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/my-python-app:${{ github.sha }} .
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKER_USERNAME }}/my-python-app:${{ github.sha }}
+
+      - name: Skip Build
+        if: env.DETECTED_LANGUAGE == 'unknown'
+        run: |
+          echo "Language is indeterminate. Skipping environment setup and build steps."

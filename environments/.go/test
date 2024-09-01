@@ -1,0 +1,17 @@
+#!/bin/bash
+
+echo "Running Go tests..."
+
+# Use environment variables or set defaults
+CURRENT_DIR=$(pwd)
+
+# Change to the current working directory
+cd "$CURRENT_DIR"
+
+# Define the Go test command
+GO_TEST_CMD="go test ./..."
+
+# Run Go tests
+$GO_TEST_CMD
+
+echo "Go tests completed."
