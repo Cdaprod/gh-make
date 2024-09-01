@@ -23,7 +23,7 @@ graph TD
     H --> P[test]
     H --> Q[Dockerfile]
     
-    R[Cdaprod/git-make] -->|Uses| A
+    R[gh ext install Cdaprod/gh-make] -->|Uses| A
     S[Other Repositories] -->|Use| A
     
     T[GitHub Actions] -->|Initializes| U[detect_language.sh]
