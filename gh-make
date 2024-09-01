@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 REPOS_DIR="${GH_MAKE_REPOS_DIR:-$HOME/repos}"
 HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
 SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
+EXT_DIR="$HOME/.local/share/gh/extensions/gh-make"
 
 # Define hooks to be installed
 HOOKS="pre-commit commit-msg post-commit pre-push post-merge"
@@ -34,10 +35,40 @@ confirm() {
   esac
 }
 
+# Function to check if setup has been run
+check_setup() {
+  if [ ! -f "$EXT_DIR/.setup_complete" ]; then
+    print_color $YELLOW "Initial setup has not been run. Please run 'sudo gh make setup' first."
+    exit 1
+  fi
+}
+
+# Function for initial setup
+setup() {
+  if [ "$(id -u)" != "0" ]; then
+    print_color $RED "This setup must be run as root. Please use 'sudo gh make setup'"
+    exit 1
+  fi
+
+  print_color $BLUE "Running initial setup for gh-make..."
+  
+  # Ensure directories exist
+  mkdir -p "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+  
+  # Set correct ownership and permissions
+  chown -R $(logname):$(logname) "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+  chmod -R 755 "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
+  
+  # Mark setup as complete
+  touch "$EXT_DIR/.setup_complete"
+  
+  print_color $GREEN "Setup complete. You can now use 'gh make' without sudo."
+  exit 0
+}
+
 # Function to select repositories
 select_repos() {
   local selected_repos=()
-  local i=1
   print_color $BLUE "Select repositories to process:"
   if [ ! -d "$REPOS_DIR" ]; then
     print_color $RED "Error: Repositories directory ($REPOS_DIR) not found."
@@ -106,21 +137,6 @@ index_repos() {
   fi
 }
 
-# Function to run setup
-setup() {
-  print_color $BLUE "Running setup to install hooks..."
-  if [ -f "$SCRIPTS_DIR/setup.sh" ]; then
-    if confirm "Do you want to run the setup script?"; then
-      bash "$SCRIPTS_DIR/setup.sh"
-      print_color $GREEN "Setup complete."
-    else
-      print_color $YELLOW "Setup skipped."
-    fi
-  else
-    print_color $RED "Error: Setup script not found in $SCRIPTS_DIR"
-  fi
-}
-
 # Function to clean up
 clean() {
   print_color $BLUE "Cleaning up repositories..."
@@ -133,6 +149,18 @@ clean() {
   print_color $GREEN "Cleanup complete."
 }
 
+# Function to check ownership and permissions
+check_ownership_and_permissions() {
+  local current_user=$(whoami)
+  local current_owner=$(stat -c '%U' "$EXT_DIR")
+
+  if [ "$current_owner" != "$current_user" ]; then
+    print_color $YELLOW "Warning: The extension directory is not owned by the current user."
+    print_color $YELLOW "Please run 'sudo gh make setup' to fix this issue."
+    exit 1
+  fi
+}
+
 # Main menu
 main_menu() {
   while true; do
@@ -140,9 +168,8 @@ main_menu() {
     print_color $YELLOW "1) Install hooks"
     print_color $YELLOW "2) Install scripts"
     print_color $YELLOW "3) Index repositories"
-    print_color $YELLOW "4) Run setup"
-    print_color $YELLOW "5) Clean up"
-    print_color $YELLOW "6) Run all"
+    print_color $YELLOW "4) Clean up"
+    print_color $YELLOW "5) Run all"
     print_color $YELLOW "0) Exit"
     read -p "$(print_color $GREEN "Enter your choice: ")" choice
 
@@ -150,12 +177,10 @@ main_menu() {
       1) install_hooks ;;
       2) install_scripts ;;
       3) index_repos ;;
-      4) setup ;;
-      5) clean ;;
-      6) 
+      4) clean ;;
+      5) 
         install_hooks
         install_scripts
-        setup
         index_repos
         ;;
       0) 
@@ -167,14 +192,22 @@ main_menu() {
   done
 }
 
-# Check if required directories exist
-if [ ! -d "$HOOKS_DIR" ]; then
-  print_color $YELLOW "Warning: Hooks directory ($HOOKS_DIR) not found. Some features may not work."
-fi
+# Main execution
+if [ "$1" = "setup" ]; then
+  setup
+else
+  check_setup
+  check_ownership_and_permissions
+  
+  # Check if required directories exist
+  if [ ! -d "$HOOKS_DIR" ]; then
+    print_color $YELLOW "Warning: Hooks directory ($HOOKS_DIR) not found. Some features may not work."
+  fi
 
-if [ ! -d "$SCRIPTS_DIR" ]; then
-  print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found. Some features may not work."
-fi
+  if [ ! -d "$SCRIPTS_DIR" ]; then
+    print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found. Some features may not work."
+  fi
 
-# Start the main menu
-main_menu
+  # Start the main menu
+  main_menu
+fi
