@@ -9,35 +9,6 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
-print_color() {
-  local color=$1
-  local message=$2
-  echo -e "${color}${message}${NC}"
-}
-
-# Determine the extension directory
-EXTENSION_DIR="$HOME/.local/share/gh/extensions/gh-make"
-
-# Ensure the extension directory exists
-mkdir -p "$EXTENSION_DIR"
-
-# Define the path for the main script
-MAIN_SCRIPT="$EXTENSION_DIR/gh-make"
-
-# Function to update the main script
-update_main_script() {
-  print_color $BLUE "Updating gh-make script..."
-  cat > "$MAIN_SCRIPT" << 'EOL'
-#!/usr/bin/env bash
-
-# Color definitions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Configuration
 REPOS_DIR="${GH_MAKE_REPOS_DIR:-$HOME/repos}"
 HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
@@ -68,11 +39,19 @@ select_repos() {
   local selected_repos=()
   local i=1
   print_color $BLUE "Select repositories to process:"
+  if [ ! -d "$REPOS_DIR" ]; then
+    print_color $RED "Error: Repositories directory ($REPOS_DIR) not found."
+    return 1
+  fi
   for repo in $(find "$REPOS_DIR" -type d -name ".git" | xargs -n 1 dirname); do
     if confirm "Include $repo?"; then
       selected_repos+=("$repo")
     fi
   done
+  if [ ${#selected_repos[@]} -eq 0 ]; then
+    print_color $YELLOW "No repositories selected."
+    return 1
+  fi
   echo "${selected_repos[@]}"
 }
 
@@ -80,11 +59,16 @@ select_repos() {
 install_hooks() {
   print_color $BLUE "Installing hooks into repositories..."
   local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
   for repo in $repos; do
     print_color $GREEN "Installing hooks in $repo..."
     for hook in $HOOKS; do
-      cp "$HOOKS_DIR/$hook" "$repo/.git/hooks/"
-      chmod +x "$repo/.git/hooks/$hook"
+      if [ -f "$HOOKS_DIR/$hook" ]; then
+        cp "$HOOKS_DIR/$hook" "$repo/.git/hooks/"
+        chmod +x "$repo/.git/hooks/$hook"
+      else
+        print_color $YELLOW "Warning: Hook $hook not found in $HOOKS_DIR"
+      fi
     done
   done
   print_color $GREEN "Hooks installation complete."
@@ -94,10 +78,15 @@ install_hooks() {
 install_scripts() {
   print_color $BLUE "Installing scripts into repositories..."
   local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
   for repo in $repos; do
     print_color $GREEN "Copying scripts to $repo..."
     mkdir -p "$repo/scripts"
-    cp -R "$SCRIPTS_DIR"/* "$repo/scripts/"
+    if [ -d "$SCRIPTS_DIR" ]; then
+      cp -R "$SCRIPTS_DIR"/* "$repo/scripts/"
+    else
+      print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found."
+    fi
   done
   print_color $GREEN "Scripts installation complete."
 }
@@ -105,22 +94,30 @@ install_scripts() {
 # Function to index repositories
 index_repos() {
   print_color $BLUE "Indexing Git repositories and adding to GitHub Project..."
-  if confirm "Do you want to run the indexing script?"; then
-    "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
-    print_color $GREEN "Indexing complete."
+  if [ -f "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh" ]; then
+    if confirm "Do you want to run the indexing script?"; then
+      bash "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
+      print_color $GREEN "Indexing complete."
+    else
+      print_color $YELLOW "Indexing skipped."
+    fi
   else
-    print_color $YELLOW "Indexing skipped."
+    print_color $RED "Error: Indexing script not found in $SCRIPTS_DIR"
   fi
 }
 
 # Function to run setup
 setup() {
   print_color $BLUE "Running setup to install hooks..."
-  if confirm "Do you want to run the setup script?"; then
-    "$SCRIPTS_DIR/setup.sh"
-    print_color $GREEN "Setup complete."
+  if [ -f "$SCRIPTS_DIR/setup.sh" ]; then
+    if confirm "Do you want to run the setup script?"; then
+      bash "$SCRIPTS_DIR/setup.sh"
+      print_color $GREEN "Setup complete."
+    else
+      print_color $YELLOW "Setup skipped."
+    fi
   else
-    print_color $YELLOW "Setup skipped."
+    print_color $RED "Error: Setup script not found in $SCRIPTS_DIR"
   fi
 }
 
@@ -128,6 +125,7 @@ setup() {
 clean() {
   print_color $BLUE "Cleaning up repositories..."
   local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
   for repo in $repos; do
     print_color $GREEN "Cleaning up $repo..."
     rm -rf "$repo/scripts"
@@ -160,54 +158,23 @@ main_menu() {
         setup
         index_repos
         ;;
-      0) exit 0 ;;
+      0) 
+        print_color $GREEN "Exiting gh-make. Goodbye!"
+        exit 0 
+        ;;
       *) print_color $RED "Invalid option. Please try again." ;;
     esac
   done
 }
 
+# Check if required directories exist
+if [ ! -d "$HOOKS_DIR" ]; then
+  print_color $YELLOW "Warning: Hooks directory ($HOOKS_DIR) not found. Some features may not work."
+fi
+
+if [ ! -d "$SCRIPTS_DIR" ]; then
+  print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found. Some features may not work."
+fi
+
 # Start the main menu
 main_menu
-EOL
-
-  chmod +x "$MAIN_SCRIPT"
-  print_color $GREEN "gh-make script updated and set as executable."
-}
-
-# Function to verify and fix permissions
-verify_permissions() {
-  print_color $BLUE "Verifying and fixing permissions..."
-  chmod +x "$MAIN_SCRIPT"
-  chmod +x "$EXTENSION_DIR/setup.sh"
-  print_color $GREEN "Permissions verified and fixed."
-}
-
-# Function to verify installation
-verify_installation() {
-  if gh extension list | grep -q "gh-make"; then
-    print_color $GREEN "gh-make extension is installed."
-  else
-    print_color $RED "Error: gh-make extension not found in gh extensions list."
-    print_color $YELLOW "Attempting to install gh-make extension..."
-    gh extension install Cdaprod/gh-make
-  fi
-}
-
-# Main setup process
-main_setup() {
-  print_color $BLUE "Starting gh-make setup process..."
-
-  # Update main script
-  update_main_script
-
-  # Verify and fix permissions
-  verify_permissions
-
-  # Verify installation
-  verify_installation
-
-  print_color $GREEN "Setup complete. You can now use 'gh make' to run the extension."
-}
-
-# Run the main setup process
-main_setup
