@@ -1,3 +1,4 @@
+```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#f9f0ff', 'secondaryColor': '#e6f0ff', 'tertiaryColor': '#f0fff0', 'quaternaryColor': '#fff0f0', 'quinaryColor': '#ffffd9'}}}%%
 graph TD
     A[Cdaprod/.github] -->|Single Source of Truth| B[Shared Resources]
@@ -26,8 +27,8 @@ graph TD
     T[GitHub Actions] -->|Initializes| U[detect_language.sh]
     U -->|Determines Language| V[Language-Specific Scripts]
     
-    W[build-and-deploy.yml] -->|Executes| X[Workflow Steps]
-    X -->|Conditional Execution| Y[Language-Specific Build]
+    W[detect-build-push.yml] -->|Executes| X[Workflow Steps]
+    X -->|Conditional Execution| Y[Language-Specific Env Build]
     
     style A fill:#f9f0ff,stroke:#333,stroke-width:4px
     style R fill:#e6f0ff,stroke:#333,stroke-width:2px
@@ -42,3 +43,4 @@ graph TD
     classDef default fill:#fff,stroke:#333,stroke-width:2px;
     classDef darkText color:#000;
     class A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y darkText;
+```  
