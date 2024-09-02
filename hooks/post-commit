@@ -1,18 +1,65 @@
 #!/bin/bash
 
-echo "Post-commit: Generating version and tagging..."
+echo "Post-commit: Managing versioning and tagging..."
 
-# Fetch the latest tags
+# Fetch the latest tags to ensure we're up-to-date with the remote repository
 git fetch --tags
 
-# Determine the next version based on the latest tag
-latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
-IFS='.' read -r major minor patch <<< "${latest_tag//[!0-9.]/}"
-patch=$((patch + 1))
-new_version="v${major}.${minor}.${patch}"
+# Determine the latest tag
+latest_tag=$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null)
 
-# Automatically create and push a new tag for the version
+# Check if there is an existing tag
+if [ -z "$latest_tag" ]; then
+    echo "No existing tags found. Initializing version at v0.0.1."
+    new_version="v0.0.1"
+else
+    # Extract major, minor, patch numbers
+    IFS='.' read -r major minor patch <<< "${latest_tag//[!0-9.]/}"
+
+    # Increment patch version by default
+    patch=$((patch + 1))
+    
+    # Allow for custom version increment from commit message
+    if git log -1 --pretty=%B | grep -q "(MINOR)"; then
+        minor=$((minor + 1))
+        patch=0
+    elif git log -1 --pretty=%B | grep -q "(MAJOR)"; then
+        major=$((major + 1))
+        minor=0
+        patch=0
+    fi
+
+    new_version="v${major}.${minor}.${patch}"
+fi
+
+# Check if the calculated version tag already exists
+if git rev-parse "$new_version" >/dev/null 2>&1; then
+    echo "Tag $new_version already exists. No new tag created."
+    exit 0
+fi
+
+# Create and push the new version tag
 git tag -a "$new_version" -m "Auto-incremented version to $new_version"
 git push origin "$new_version"
 
 echo "New version tagged as $new_version."
+
+# Additional step for retroactive major version adjustment
+read -p "Do you want to adjust the major version retroactively? (y/n): " adjust_major
+
+if [[ "$adjust_major" == "y" ]]; then
+    read -p "Enter the new major version (e.g., v3.0.0): " new_major_version
+    
+    # Delete old tag if exists and push the deletion
+    if git rev-parse "$new_major_version" >/dev/null 2>&1; then
+        git tag -d "$new_major_version"
+        git push origin :refs/tags/$new_major_version
+        echo "Old major version tag $new_major_version deleted."
+    fi
+
+    # Create and push the new major version tag
+    git tag -a "$new_major_version" -m "Retroactively updated major version to $new_major_version"
+    git push origin "$new_major_version"
+
+    echo "Major version updated to $new_major_version."
+fi

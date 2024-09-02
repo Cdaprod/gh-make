@@ -1,12 +1,20 @@
 #!/bin/bash
 
-echo "Checking commit message format..."
+echo "Checking commit message format and version cues..."
+
+# Read the commit message
+commit_msg=$(cat "$1")
 
 # Ensure commit message follows a convention but does not block if it doesn't
-commit_msg=$(cat "$1")
-if ! grep -qE "^(feat|fix|docs|style|refactor|test|chore): " <<< "$commit_msg"; then
+if ! grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert|release): " <<< "$commit_msg"; then
   echo "Warning: Commit message does not follow the convention 'type: description'."
-  echo "Recommended types: feat, fix, docs, style, refactor, test, chore."
+  echo "Recommended types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert, release."
+fi
+
+# Check for versioning cues for the post-commit hook
+if grep -qE "\(MAJOR\)|\(MINOR\)" <<< "$commit_msg"; then
+  echo "Detected version bump cue in commit message."
+  echo "Make sure to adjust your versioning appropriately."
 fi
 
 echo "Commit message check completed."

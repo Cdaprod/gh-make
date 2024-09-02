@@ -1,0 +1,13 @@
+name: Install Binaries
+
+on: [push, workflow_dispatch]
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
+      - name: Install Binaries
+        run: .github/scripts/install-binaries.sh

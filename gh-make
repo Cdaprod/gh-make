@@ -12,11 +12,9 @@ NC='\033[0m' # No Color
 # Configuration
 EXT_DIR="$HOME/.local/share/gh/extensions/gh-make"
 REPOS_DIR="${GH_MAKE_REPOS_DIR:-$HOME/repos}"
-HOOKS_DIR="${GH_MAKE_HOOKS_DIR:-$HOME/.github/hooks}"
-SCRIPTS_DIR="${GH_MAKE_SCRIPTS_DIR:-$HOME/.github/scripts}"
-
-# Define hooks to be installed
-HOOKS="pre-commit commit-msg post-commit pre-push post-merge"
+GITHUB_DIR="${GH_MAKE_GITHUB_DIR:-$HOME/.github}"
+DETECT_SCRIPT="$GITHUB_DIR/environments/detect_language.sh"
+MAKEFILE_TEMPLATE="$GITHUB_DIR/Makefile.template"
 
 # Function to print colored output
 print_color() {
@@ -33,22 +31,6 @@ confirm() {
     y|Y ) return 0;;
     * ) return 1;;
   esac
-}
-
-# Function for setup
-setup() {
-  print_color $BLUE "Running setup for gh-make..."
-  
-  # Ensure directories exist
-  mkdir -p "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
-  
-  # Set correct permissions
-  chmod -R 755 "$EXT_DIR" "$REPOS_DIR" "$HOOKS_DIR" "$SCRIPTS_DIR"
-  
-  # Mark setup as complete
-  touch "$EXT_DIR/.setup_complete"
-  
-  print_color $GREEN "Setup complete. You can now use 'gh make' commands."
 }
 
 # Function to select repositories
@@ -71,55 +53,175 @@ select_repos() {
   echo "${selected_repos[@]}"
 }
 
-# Function to install hooks
-install_hooks() {
-  print_color $BLUE "Installing hooks into repositories..."
-  local repos=$(select_repos)
-  [ $? -eq 0 ] || return 1
-  for repo in $repos; do
-    print_color $GREEN "Installing hooks in $repo..."
-    for hook in $HOOKS; do
-      if [ -f "$HOOKS_DIR/$hook" ]; then
-        cp "$HOOKS_DIR/$hook" "$repo/.git/hooks/"
-        chmod +x "$repo/.git/hooks/$hook"
-      else
-        print_color $YELLOW "Warning: Hook $hook not found in $HOOKS_DIR"
-      fi
-    done
-  done
-  print_color $GREEN "Hooks installation complete."
-}
-
-# Function to install scripts
-install_scripts() {
-  print_color $BLUE "Installing scripts into repositories..."
-  local repos=$(select_repos)
-  [ $? -eq 0 ] || return 1
-  for repo in $repos; do
-    print_color $GREEN "Copying scripts to $repo..."
-    mkdir -p "$repo/scripts"
-    if [ -d "$SCRIPTS_DIR" ]; then
-      cp -R "$SCRIPTS_DIR"/* "$repo/scripts/"
+# Function to detect repository environment using external script
+detect_environment() {
+  local repo="$1"
+  if [ -f "$DETECT_SCRIPT" ]; then
+    pushd "$repo" > /dev/null
+    local detected_lang=$("$DETECT_SCRIPT")
+    popd > /dev/null
+    echo "$detected_lang"
+  else
+    print_color $YELLOW "Warning: detect_language.sh script not found. Using basic detection."
+    if [ -f "$repo/requirements.txt" ] || [ -f "$repo/setup.py" ]; then
+      echo "python"
+    elif [ -f "$repo/go.mod" ] || [ -f "$repo/go.sum" ]; then
+      echo "go"
     else
-      print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found."
+      echo "unknown"
     fi
-  done
-  print_color $GREEN "Scripts installation complete."
+  fi
 }
 
-# Function to index repositories
-index_repos() {
-  print_color $BLUE "Indexing Git repositories and adding to GitHub Project..."
-  if [ -f "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh" ]; then
-    if confirm "Do you want to run the indexing script?"; then
-      bash "$SCRIPTS_DIR/git-repo-project-25-index-host-projects.sh"
-      print_color $GREEN "Indexing complete."
+# Function to handle file conflicts
+handle_conflict() {
+  local target="$1"
+  local source="$2"
+  print_color $YELLOW "File already exists: $target"
+  select action in "Overwrite" "Skip" "View Diff" "Merge"; do
+    case $action in
+      Overwrite ) return 0;;
+      Skip ) return 1;;
+      "View Diff" )
+        if command -v diff >/dev/null 2>&1; then
+          diff -u "$target" "$source" || true
+        else
+          print_color $RED "diff command not found. Unable to show differences."
+        fi
+        ;;
+      Merge )
+        if command -v vimdiff >/dev/null 2>&1; then
+          vimdiff "$target" "$source"
+          return 2
+        else
+          print_color $RED "vimdiff command not found. Unable to merge."
+        fi
+        ;;
+      * ) print_color $RED "Invalid option. Please try again.";;
+    esac
+  done
+}
+
+# Function to safely copy a file
+safe_copy() {
+  local source="$1"
+  local target="$2"
+  if [ -f "$target" ]; then
+    handle_conflict "$target" "$source"
+    local conflict_result=$?
+    if [ $conflict_result -eq 0 ]; then
+      cp "$source" "$target"
+    elif [ $conflict_result -eq 2 ]; then
+      print_color $GREEN "File merged. Please review the changes."
     else
-      print_color $YELLOW "Indexing skipped."
+      print_color $YELLOW "Skipping $target"
+      return 1
     fi
   else
-    print_color $RED "Error: Indexing script not found in $SCRIPTS_DIR"
+    cp "$source" "$target"
   fi
+}
+
+# Function to distribute Makefile
+distribute_makefile() {
+  print_color $BLUE "Distributing Makefile to repositories..."
+  local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
+  for repo in $repos; do
+    print_color $GREEN "Processing Makefile for $repo..."
+    local env=$(detect_environment "$repo")
+    local makefile_source="$MAKEFILE_TEMPLATE"
+    if [ "$env" != "unknown" ] && [ -f "$GITHUB_DIR/environments/.$env/Makefile.template" ]; then
+      makefile_source="$GITHUB_DIR/environments/.$env/Makefile.template"
+    fi
+    if [ -f "$makefile_source" ]; then
+      if safe_copy "$makefile_source" "$repo/Makefile"; then
+        print_color $GREEN "Makefile ($env) distributed to $repo"
+      fi
+    else
+      print_color $YELLOW "Warning: Makefile template not found at $makefile_source"
+    fi
+  done
+  print_color $GREEN "Makefile distribution complete."
+}
+
+# Function to distribute environment-specific files
+distribute_environment() {
+  print_color $BLUE "Distributing environment-specific files..."
+  local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
+  for repo in $repos; do
+    local env=$(detect_environment "$repo")
+    if [ "$env" != "unknown" ]; then
+      print_color $GREEN "Detected $env environment for $repo"
+      local source_dir="$GITHUB_DIR/environments/.$env"
+      local target_dir="$repo/.github/environments/.$env"
+      if [ -d "$source_dir" ]; then
+        mkdir -p "$target_dir"
+        for file in "$source_dir"/*; do
+          if [ -f "$file" ]; then
+            local filename=$(basename "$file")
+            if safe_copy "$file" "$target_dir/$filename"; then
+              chmod +x "$target_dir/$filename" 2>/dev/null || true
+            fi
+          fi
+        done
+        print_color $GREEN "Distributed $env environment files to $repo"
+      else
+        print_color $YELLOW "Warning: $env environment directory not found in $GITHUB_DIR/environments"
+      fi
+    else
+      print_color $YELLOW "Could not detect environment for $repo. Skipping."
+    fi
+  done
+  print_color $GREEN "Environment-specific distribution complete."
+}
+
+# Function to distribute files (hooks, workflows, scripts)
+distribute_files() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local file_type="$3"
+
+  print_color $BLUE "Distributing $file_type from $source_dir to repositories..."
+  local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
+  for repo in $repos; do
+    print_color $GREEN "Copying $file_type to $repo..."
+    mkdir -p "$repo/$target_dir"
+    if [ -d "$source_dir" ]; then
+      for file in "$source_dir"/*; do
+        if [ -f "$file" ]; then
+          local filename=$(basename "$file")
+          if safe_copy "$file" "$repo/$target_dir/$filename"; then
+            chmod +x "$repo/$target_dir/$filename" 2>/dev/null || true
+          fi
+        fi
+      done
+    else
+      print_color $YELLOW "Warning: $file_type directory ($source_dir) not found."
+    fi
+  done
+  print_color $GREEN "$file_type distribution complete."
+}
+
+# Function to run make command across repositories
+run_make_command() {
+  local command="$1"
+  print_color $BLUE "Running 'make $command' across repositories..."
+  local repos=$(select_repos)
+  [ $? -eq 0 ] || return 1
+  for repo in $repos; do
+    print_color $GREEN "Executing 'make $command' in $repo..."
+    if [ -f "$repo/Makefile" ]; then
+      pushd "$repo" > /dev/null
+      make $command
+      popd > /dev/null
+    else
+      print_color $YELLOW "Warning: No Makefile found in $repo. Skipping."
+    fi
+  done
+  print_color $GREEN "Make command execution complete."
 }
 
 # Function to clean up
@@ -129,7 +231,9 @@ clean() {
   [ $? -eq 0 ] || return 1
   for repo in $repos; do
     print_color $GREEN "Cleaning up $repo..."
-    rm -rf "$repo/scripts"
+    rm -rf "$repo/.github"
+    rm -f "$repo/Makefile"
+    print_color $GREEN "Removed .github directory and Makefile from $repo"
   done
   print_color $GREEN "Cleanup complete."
 }
@@ -138,23 +242,35 @@ clean() {
 main_menu() {
   while true; do
     print_color $BLUE "\nGH Make - Main Menu"
-    print_color $YELLOW "1) Install hooks"
-    print_color $YELLOW "2) Install scripts"
-    print_color $YELLOW "3) Index repositories"
-    print_color $YELLOW "4) Clean up"
-    print_color $YELLOW "5) Run all"
+    print_color $YELLOW "1) Distribute Makefile"
+    print_color $YELLOW "2) Run make command across repositories"
+    print_color $YELLOW "3) Distribute environment-specific files"
+    print_color $YELLOW "4) Distribute hooks"
+    print_color $YELLOW "5) Distribute workflows"
+    print_color $YELLOW "6) Distribute scripts"
+    print_color $YELLOW "7) Clean up"
+    print_color $YELLOW "8) Run all (distribute everything and run 'make all')"
     print_color $YELLOW "0) Exit"
     read -p "$(print_color $GREEN "Enter your choice: ")" choice
 
     case $choice in
-      1) install_hooks ;;
-      2) install_scripts ;;
-      3) index_repos ;;
-      4) clean ;;
-      5) 
-        install_hooks
-        install_scripts
-        index_repos
+      1) distribute_makefile ;;
+      2) 
+        read -p "Enter make command to run: " make_cmd
+        run_make_command "$make_cmd"
+        ;;
+      3) distribute_environment ;;
+      4) distribute_files "$GITHUB_DIR/hooks" ".github/hooks" "hooks" ;;
+      5) distribute_files "$GITHUB_DIR/workflows" ".github/workflows" "workflows" ;;
+      6) distribute_files "$GITHUB_DIR/scripts" ".github/scripts" "scripts" ;;
+      7) clean ;;
+      8) 
+        distribute_makefile
+        distribute_environment
+        distribute_files "$GITHUB_DIR/hooks" ".github/hooks" "hooks"
+        distribute_files "$GITHUB_DIR/workflows" ".github/workflows" "workflows"
+        distribute_files "$GITHUB_DIR/scripts" ".github/scripts" "scripts"
+        run_make_command "all"
         ;;
       0) 
         print_color $GREEN "Exiting gh-make. Goodbye!"
@@ -166,24 +282,4 @@ main_menu() {
 }
 
 # Main execution
-if [ "$1" = "setup" ]; then
-  setup
-else
-  # Check if setup has been run
-  if [ ! -f "$EXT_DIR/.setup_complete" ]; then
-    print_color $YELLOW "Initial setup has not been run. Running setup now..."
-    setup
-  fi
-  
-  # Check if required directories exist
-  if [ ! -d "$HOOKS_DIR" ]; then
-    print_color $YELLOW "Warning: Hooks directory ($HOOKS_DIR) not found. Some features may not work."
-  fi
-
-  if [ ! -d "$SCRIPTS_DIR" ]; then
-    print_color $YELLOW "Warning: Scripts directory ($SCRIPTS_DIR) not found. Some features may not work."
-  fi
-
-  # Start the main menu
-  main_menu
-fi
+main_menu

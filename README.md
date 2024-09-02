@@ -1,3 +1,5 @@
+![](public/image.png)
+
 # David Cannan aka Cdaprod’s Git Hook System
 
 ```mermaid

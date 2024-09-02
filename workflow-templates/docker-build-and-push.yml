@@ -1,0 +1,46 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - '*'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Get current user and repo
+        id: get-repo-info
+        run: |
+          REPO_URL=$(git config --get remote.origin.url)
+          REPO_NAME=$(basename -s .git $REPO_URL)
+          USER_NAME=$(basename $(dirname $REPO_URL))
+          echo "REPO_NAME=${REPO_NAME}" >> $GITHUB_ENV
+          echo "USER_NAME=${USER_NAME}" >> $GITHUB_ENV
+
+      - name: Get latest Git tag
+        id: git-tag
+        run: |
+          TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
+          echo "LATEST_TAG=${TAG}" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.USER_NAME }}/${{ env.REPO_NAME }}:${{ env.LATEST_TAG }} .
+
+      - name: Push Docker image to DockerHub
+        run: |
+          docker push ${{ env.USER_NAME }}/${{ env.REPO_NAME }}:${{ env.LATEST_TAG }}

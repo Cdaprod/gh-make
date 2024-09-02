@@ -3,7 +3,7 @@ name: Detect Build Push
 on:
   push:
     branches:
-      - main
+      - '**'  # Triggers on push to any branch
   pull_request:
   workflow_dispatch:
 
@@ -16,42 +16,67 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Detect project language
+        id: detect-language
         run: |
           bash .github/environments/detect_language.sh
+          echo "DETECTED_LANGUAGE=$(cat .github/environments/.detected_language)" >> $GITHUB_ENV
+
+      - name: Get current branch name
+        id: branch-name
+        run: |
+          echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+
+      - name: Get repository name
+        id: repo-name
+        run: |
+          REPO_NAME=$(basename $GITHUB_REPOSITORY)
+          echo "APP_NAME=${REPO_NAME}" >> $GITHUB_ENV
+
+      - name: Check if Docker image exists
+        id: check-image
+        run: |
+          TAG_VERSION=$(git describe --tags `git rev-list --tags --max-count=1` --abbrev=0)-${{ env.BRANCH_NAME }}-${{ env.DETECTED_LANGUAGE }}
+          if docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:$TAG_VERSION; then
+            echo "IMAGE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "IMAGE_EXISTS=false" >> $GITHUB_ENV
+          fi
 
       - name: Initialize Environment for Go
-        if: env.DETECTED_LANGUAGE == 'go'
+        if: env.DETECTED_LANGUAGE == 'go' && env.IMAGE_EXISTS == 'false'
         run: |
           echo "Initializing Go environment..."
           bash .github/environments/.go/init
 
       - name: Initialize Environment for Python
-        if: env.DETECTED_LANGUAGE == 'python'
+        if: env.DETECTED_LANGUAGE == 'python' && env.IMAGE_EXISTS == 'false'
         run: |
           echo "Initializing Python environment..."
           bash .github/environments/.py/init
 
       - name: Build and Push Go Application
-        if: env.DETECTED_LANGUAGE == 'go'
+        if: env.DETECTED_LANGUAGE == 'go' && env.IMAGE_EXISTS == 'false'
         run: |
           echo "Building Go application..."
           bash .github/environments/.go/build
           echo "Pushing Go application..."
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/my-go-app:${{ github.sha }} .
-          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-          docker push ${{ secrets.DOCKER_USERNAME }}/my-go-app:${{ github.sha }}
+          TAG_VERSION=$(git describe --tags `git rev-list --tags --max-count=1` --abbrev=0)-${{ env.BRANCH_NAME }}-go
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:$TAG_VERSION .
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:$TAG_VERSION
 
       - name: Build and Push Python Application
-        if: env.DETECTED_LANGUAGE == 'python'
+        if: env.DETECTED_LANGUAGE == 'python' && env.IMAGE_EXISTS == 'false'
         run: |
           echo "Building Python application..."
           bash .github/environments/.py/build
           echo "Pushing Python application..."
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/my-python-app:${{ github.sha }} .
-          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-          docker push ${{ secrets.DOCKER_USERNAME }}/my-python-app:${{ github.sha }}
+          TAG_VERSION=$(git describe --tags `git rev-list --tags --max-count=1` --abbrev=0)-${{ env.BRANCH_NAME }}-py
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:$TAG_VERSION .
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.APP_NAME }}:$TAG_VERSION
 
       - name: Skip Build
-        if: env.DETECTED_LANGUAGE == 'unknown'
+        if: env.DETECTED_LANGUAGE == 'unknown' || env.IMAGE_EXISTS == 'true'
         run: |
-          echo "Language is indeterminate. Skipping environment setup and build steps."
+          echo "Docker image already exists or language is indeterminate. Skipping environment setup and build steps."
