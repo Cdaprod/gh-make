@@ -1,0 +1,78 @@
+name: GitVersion Docker Build and Push Workflow
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'next/styling'
+      - 'typescript/nextjs'
+  pull_request:
+    branches:
+      - 'main'
+      - 'next/styling'
+      - 'typescript/nextjs'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64, linux/arm/v7]  # Define architectures here
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v0.9.7
+        with:
+          versionSpec: '5.x'
+
+      - name: Determine Version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v0.9.7
+        with:
+          useConfigFile: false
+
+      - name: Set lowercase repository name
+        run: echo "REPO_NAME_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Set Docker image name and tag
+        run: |
+          MAJOR_VERSION=$(echo "${{ steps.gitversion.outputs.major }}" | tr '[:upper:]' '[:lower:]')
+          MINOR_VERSION=$(echo "${{ steps.gitversion.outputs.minor }}" | tr '[:upper:]' '[:lower:]')
+          PATCH_VERSION=$(echo "${{ steps.gitversion.outputs.patch }}" | tr '[:upper:]' '[:lower:]')
+          SEMANTIC_VERSION="${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}-${GITHUB_REF_NAME}"
+          echo "DOCKER_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/${REPO_NAME_LOWER##*/}:${SEMANTIC_VERSION}" >> $GITHUB_ENV
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image for matrix platform
+        uses: docker/build-push-action@v4
+        if: success()
+        with:
+          context: .
+          platforms: ${{ matrix.platform }} # Use the platform from the matrix
+          push: true
+          tags: ${{ env.DOCKER_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Post build actions on success
+        if: success() # Only runs if the build was successful
+        run: |
+          echo "Build successful for ${{ env.DOCKER_IMAGE }}"
