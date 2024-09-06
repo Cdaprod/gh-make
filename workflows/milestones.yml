@@ -1,105 +1,39 @@
 name: Create Project Milestones
 
 on:
-  workflow_dispatch: # Allows manual trigger
+  push:
+    paths:
+      - '.github/workflows/milestones.yml'
+  workflow_dispatch:
 
 jobs:
   create-milestones:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Create Milestone: Project Initialization 🎉
-        run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Project Initialization 🎉",
-              "state": "open",
-              "description": "Foundation layer: Initializing the project, including repository creation, basic configuration, and documentation. 🎉"
-            }'
+      - name: Enable Debug Logging
+        run: echo "ACTIONS_RUNNER_DEBUG=true" >> $GITHUB_ENV
 
-      - name: Create Milestone: Core Feature Development 💡
+      - name: Create Milestone for Project Initialization
         run: |
           curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Core Feature Development 💡",
-              "state": "open",
-              "description": "Core layer: Developing the essential features that define the core functionality. 💡"
-            }'
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/milestones \
+          -d '{"title": "Project Initialization", "state": "open", "description": "Foundation layer - Initializing the project."}'
 
-      - name: Create Milestone: Proof of Concept ✅
+      - name: Create Milestone for Core Feature Development
         run: |
           curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Proof of Concept ✅",
-              "state": "open",
-              "description": "Validation layer: Creating a proof of concept to validate the core idea and test the technical feasibility. ✅"
-            }'
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/milestones \
+          -d '{"title": "Core Feature Development", "state": "open", "description": "Core layer - Developing essential features."}'
 
-      - name: Create Milestone: Prototype Development 🛠️
+      - name: Create Milestone for Proof of Concept
         run: |
           curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Prototype Development 🛠️",
-              "state": "open",
-              "description": "Prototype layer: Developing a working prototype based on the proof of concept. 🛠️"
-            }'
-
-      - name: Create Milestone: Staging Environment 🧪
-        run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Staging Environment 🧪",
-              "state": "open",
-              "description": "Refinement layer: Setting up a staging environment for comprehensive testing before production. 🧪"
-            }'
-
-      - name: Create Milestone: Beta Release 📦
-        run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Beta Release 📦",
-              "state": "open",
-              "description": "Public layer: Preparing and releasing a beta version for external testing. 📦"
-            }'
-
-      - name: Create Milestone: Production Release 🚀
-        run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Production Release 🚀",
-              "state": "open",
-              "description": "Release layer: Finalizing and releasing the software to the public. 🚀"
-            }'
-
-      - name: Create Milestone: Established 🏆
-        run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/[USER]/[REPO]/milestones \
-            -d '{
-              "title": "Established 🏆",
-              "state": "open",
-              "description": "Maturity layer: Project has reached stability and is now considered established. 🏆"
-            }'
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/milestones \
+          -d '{"title": "Proof of Concept", "state": "open", "description": "Validation layer - Creating a proof of concept to validate the core idea."}'
