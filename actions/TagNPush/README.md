@@ -1,0 +1,89 @@
+Here’s the updated `action.yml` with the name `TagNPush` for your action:
+
+### `action.yml` (TagNPush)
+
+```yaml
+name: 'TagNPush'
+description: 'Tag version using GitVersion and push multi-arch images to DockerHub or GitHub Container Registry'
+author: 'cdaprod'
+inputs:
+  docker_username:
+    description: 'The DockerHub or GHCR username'
+    required: true
+  docker_password:
+    description: 'The DockerHub or GHCR password or token'
+    required: true
+  image_registry:
+    description: 'DockerHub or GHCR registry where the image should be pushed (e.g. docker.io, ghcr.io)'
+    required: true
+  platforms:
+    description: 'Comma-separated list of platforms to build for (e.g. linux/amd64,linux/arm64)'
+    required: false
+    default: 'linux/amd64,linux/arm64'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Fetch full history for versioning
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.9.7
+      with:
+        versionSpec: '5.x'
+
+    - name: Run GitVersion
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@v0.9.7
+
+    - name: Log in to container registry
+      run: |
+        echo "${{ inputs.docker_password }}" | docker login ${{ inputs.image_registry }} -u "${{ inputs.docker_username }}" --password-stdin
+
+    - name: Build and push multi-arch images
+      run: |
+        docker buildx build --platform ${{ inputs.platforms }} \
+        -t ${{ inputs.image_registry }}/${{ github.repository_owner | toLowerCase() }}/${{ github.repository | toLowerCase() }}:${{ steps.gitversion.outputs.semVer }} \
+        --push .
+
+    - name: Tag version
+      run: |
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+        git tag v${{ steps.gitversion.outputs.semVer }}
+        git push origin v${{ steps.gitversion.outputs.semVer }}
+
+branding:
+  icon: 'tag'
+  color: 'blue'
+```
+
+### How to Use the `TagNPush` Action
+
+You can now invoke the `TagNPush` action in your workflow like this:
+
+```yaml
+name: Build and Tag
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - release/**
+
+jobs:
+  tag-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run TagNPush Action
+        uses: Cdaprod/.github/.github/actions/TagNPush@main
+        with:
+          docker_username: ${{ secrets.DOCKER_USERNAME }}
+          docker_password: ${{ secrets.DOCKER_PASSWORD }}
+          image_registry: docker.io  # or ghcr.io
+```
+
+This setup will perform version tagging using `GitVersion` and push multi-arch images to your registry in a single step under the name `TagNPush`.
